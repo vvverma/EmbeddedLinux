@@ -1,0 +1,26 @@
+TFTP (Trivial File Transfer Protocol) server can be used to test kernel images on your embedded target and speed up development.
+
+To install a TFTP server on ubuntu, run:
+
+sudo apt-get install tftpd
+Then, create a file in /etc/xinetd.d/ called tftp and add the following :
+
+# description: The tftp server serves files using the trivial file transfer
+#       protocol.  The tftp protocol is often used to boot diskless
+#       workstations, download configuration files to network-aware printers,
+#       and to start the installation process for some operating systems.
+service tftp
+{
+        socket_type             = dgram
+        protocol                = udp
+        wait                    = yes
+        user                    = root
+        server                  = /usr/sbin/in.tftpd
+        server_args             = -s /home/cpeacock/export
+#       disable                 = yes
+        per_source              = 11
+        cps                     = 100 2
+}
+And to apply the changes, execute:
+
+sudo service xinetd restart

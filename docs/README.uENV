@@ -1,0 +1,308 @@
+ Standard uEnv.txt File
+========================
+I'll use a standard (Robert Wilson's) Ubuntu SD Card image's uEnv.txt
+file, shown below, as an example (=> denotes a run-on line):
+
+uenvcmd=run findfdt; if test $board_name = A335BNLT; then setenv =>
+mmcdev 1; mmc dev ${mmcdev}; if mmc rescan; then setenv mmc1 1;else =>
+setenv mmc1 0;fi;fi;setenv mmcdev 0; mmc dev ${mmcdev}; if mmc rescan; =>
+then setenv mmc0 1;else setenv mmc0 0;fi;if run loaduimage; then run =>
+loadfdt;run mmcboot;fi;
+mmcroot=/dev/mmcblk0p2 rw
+loadfdt=ext4load mmc ${mmcdev}:2 ${fdtaddr} /boot/dtbs/${fdtfile}
+loaduimage=if ext4load mmc 0:2 ${loadaddr} /boot/zImage; then setenv =>
+mmcdev 0; else setenv mmcdev 1; if test $mmc0 = 1; then setenv mmcroot =>
+/dev/mmcblk1p2 rw; fi; ext4load mmc 1:2 ${loadaddr} /boot/zImage; fi
+
+The Standard Partition Layout
+=============================
+The uEnv.txt file is one of a group of three files placed on the first,
+FAT-formatted partition of the boot device.  The MLO file must be the
+first file on the partition, and is used by the board ROM to boot the
+u-boot.img file, the U-Boot code itself.  U-Boot then reads the uEnv.txt
+file in order to get the specific commands needed to load and run the
+kernel, which then continues with the usual Linux boot process.  (There's
+a utility available, mkcard, which is a shell script that sets up an
+SD card in the format expected by U-Boot.)
+
+Older versions of U-Boot used a similar sequence, but with a uEnv.txt
+named boot.scr in some sort of binary format; I haven't investigated
+them further.
+
+The U-Boot Hush Shell
+=====================
+U-Boot contains a shell, Hush, which can be used on startup via a terminal
+for debugging, but which also after a suitable timeout runs the default
+command "bootcmd".  It is this command which uEnv.txt strings modify in
+order to start the required boot process.  Hush has BASH-like control
+structures, and also BASH-like reserved characters such as '#' (which
+starts a comment): when these are needed in an environment variable they
+must be escaped by enclosing the string in single quotes.
+
+The variable "bootcmd" is expanded by substitution from two sources,
+the global environment variables and the local environment variables.
+Older versions of U-Boot read and stored their global environment in flash
+memory, but with no flash the BBB uses a default global environment stored
+in u-boot.img.  It is these strings which are modified by uEnv.txt, which
+is why the uEnv.txt file looks incomplete.
+
+Local environment variables are instantiated with a simple "name=value",
+and accessed with "$name" or "${name}"; global variables are set with
+setenv and accessed just by "name".  Environment variables can be used
+as commands; local environment variables are run by naming them, "$name",
+and global environment variables are run via the run command, "run name".
+Running a uEnv.txt file therefore results in a whole series of macro
+substitutions, which makes the original intention hard to discern.
+
+U-Boot was intended from the start to be the "Universal Embedded Boot Loader",
+and it is.  However, it is very easily configured and such changes are
+generally not documented.  If you haven't built it yourself it can be
+difficult to find out exactly what your version can do; the tokens used
+in the example above, for instance, are pretty obscure.  In the end
+brute force seemed easiest, and I ran strings (a Unix utility) on the
+u-boot.img file, and grepped the result for any token name whose meaning
+wasn't clear (ie. all of them).
+
+uEnv.txt Macro Expansion
+========================
+The following text shows the expansion of each of the tokens of the
+"standard" uEnv.txt file listed above.  The macros have been formatted
+for readability, with most of the necessary terminators (semi-colons)
+removed. Comments have been added where often in reality they would not
+be permitted.
+
+It's helpful to know that /etc/fstab on the BBB looks something like this:
+
+/dev/mmcblk0p1      /boot/uboot    vfat   noauto,noatime             1   2
+/dev/mmcblk0p2      /              ext4   noatime,errors=remount-ro  0   1
+proc /proc proc defaults 0 0
+
+with the full range of mmc devices being:
+
+cwr@sixpence ~ $ ls -trl /dev/mm*
+brw-rw---- 1 root disk 179,  8 Jan  1 00:00 /dev/mmcblk1
+brw-rw---- 1 root disk 179,  0 Jan  1 00:00 /dev/mmcblk0
+brw-rw---- 1 root disk 179, 16 Jan  1 00:00 /dev/mmcblk1boot0
+brw-rw---- 1 root disk 179, 24 Jan  1 00:00 /dev/mmcblk1boot1
+brw-rw---- 1 root disk 179, 10 Jan  1 00:00 /dev/mmcblk1p2
+brw-rw---- 1 root disk 179,  9 Jan  1 00:00 /dev/mmcblk1p1
+brw-rw---- 1 root disk 179,  2 Jan  1 00:00 /dev/mmcblk0p2
+brw-rw---- 1 root disk 179,  1 Jan  1 00:00 /dev/mmcblk0p1
+cwr@sixpence ~ $
+
+(The purpose of the mmcblk1boot* devices is unknown at present.)
+
+#
+# Global variables set in u-boot.img
+#
+
+# The default boot command.
+bootcmd=
+    #  Run the global variable findfdt as a command.
+    run findfdt
+    # Shell conditional and test command, as in BASH.
+    if test $board_name = A335BNLT
+    then
+        # Set the global variable mmcdev
+        setenv mmcdev 1
+        # Set the current mmc device accordingly.
+        mmc dev ${mmcdev}
+        # Try to initialise the device.
+        if mmc rescan
+        then
+            echo SD/MMC found on device ${mmcdev}
+            # Load the uEnv.txt file into RAM.
+            if run loadbootenv
+            then
+                # Update the global environment accordingly.
+                run importbootenv
+            fi
+            # uenvcmd is a global variable loaded from uEnv.txt
+            if test -n $uenvcmd
+            then
+                echo Running uenvcmd ...
+                run uenvcmd
+            fi
+        fi
+    fi
+    # If unenvcmd succeeds, it never returns.
+    # If it fails, try booting from mmc device 0
+    setenv mmcdev 0
+    mmc dev ${mmcdev}
+    if mmc rescan
+    then
+        echo SD/MMC found on device ${mmcdev}
+        if run loadbootenv
+        then
+            run importbootenv
+        fi
+        if test -n $uenvcmd
+        then
+            echo Running uenvcmd ...
+            run uenvcmd
+        fi
+        # Try loading directly from the mmc device.
+        if run loaduimage
+        then
+            run loadfdt
+            run mmcboot
+        fi
+    else
+        # As a last resort, try booting from NAND flash.
+        run nandboot
+    fi
+
+# The global variable containing the arguments to the bootm and bootz commands.
+bootargs
+
+# The delay, in seconds, before U-Boot boots the default image.
+bootdelay=1
+
+# The local environment storage filename.
+bootenv=uEnv.txt
+
+# The Flattened Descriptor Table load address.
+fdtaddr=0x80F80000
+
+# This token doesn't exist anywhere in the U-Boot or kernel sources.
+fixrtc
+
+# Set the global variables for the appropriate Device Tree.
+findfdt=
+  if test $board_name = A335BONE
+  then
+    setenv fdtfile am335x-bone.dtb
+    setenv dtb_file am335x-bone.dtb
+  fi
+  if test $board_name = A335BNLT
+  then
+    setenv fdtfile am335x-boneblack.dtb
+    setenv dtb_file am335x-boneblack.dtb
+  fi
+  if test $board_name = A33515BB
+  then
+    setenv fdtfile am335x-evm.dtb
+    setenv dtb_file am335x-evm.dtb
+  fi
+  if test $board_name = A335X_SK
+  then
+    setenv fdtfile am335x-evmsk.dtb
+    setenv dtb_file am335x-evmsk.dtb
+  fi
+
+# Update the global environment from an address in memory,
+# with the data in text format.  If there is no filesize
+# argument the data must be null-terminated.
+importbootenv=echo Importing environment from mmc ...; env import -t =>
+$loadaddr $filesize
+
+# The kernel load address.
+loadaddr=0x80200000
+
+# Load a file into RAM from the mmc interface.
+loadbootenv=load mmc ${mmcdev}:${mmcpart} ${loadaddr} ${bootenv}
+
+# Load a (kernel) file into RAM from the mmc interface.
+loaduimage=load mmc ${mmcdev}:${mmcpart} ${loadaddr} zImage
+
+# Set the kernel boot arguments.
+mmcargs=setenv bootargs console=${console} ${optargs} root=${mmcroot} =>
+rootfstype=${mmcrootfstype}
+
+# Boot from an image in memory.
+mmcboot=echo Booting from mmc ...; run mmcargs; bootz ${loadaddr} - ${fdtaddr}
+
+# Set the mmc root filesystem type.
+mmcrootfstype=ext4 rootwait fixrtc
+
+# Boot from NAND flash.
+nandboot=echo Booting from nand ...; run nandargs; nand read ${loadaddr} =>
+${nandsrcaddr} ${nandimgsize}; bootm ${loadaddr}
+
+# Size of image in NAND flash.
+nandimgsize=0x500000
+
+# Address of image in NAND flash.
+nandsrcaddr=0x280000
+
+# Optional kernel arguments (in this case, unset).
+optargs=
+
+#
+# Commands recognised by the Hush shell.
+#
+ext4load - load a binary file from a Ext4 filesystem.
+
+bootm - boot an application image from memory, with optional arguments.
+
+bootz - boot a kernel zImage from memory, with optional arguments.
+
+mmc part - list available partitions on the current mmc device.
+
+mmc dev [dev] [part] - show or set the current mmc device [partition].
+
+mmc rescan - reset and initialize the current mmc device.
+
+#
+# Linux kernel arguments.
+#
+rootwait - wait indefinitely for the root device to show up.
+
+#
+# The expanded "standard" uEnv.txt file.
+#
+# Initialise uenvcmd, a local variable used by bootcmd.
+# Much of this duplicates the setup in bootcmd.
+uenvcmd=
+    run findfdt
+    if test $board_name = A335BNLT
+    then
+        setenv mmcdev 1
+        mmc dev ${mmcdev}
+        if mmc rescan
+        then
+            setenv mmc1 1
+        else
+            setenv mmc1 0
+        fi
+    fi
+    setenv mmcdev 0
+    mmc dev ${mmcdev}
+    if mmc rescan
+    then
+        setenv mmc0 1
+    else
+        setenv mmc0 0
+    fi
+    # Run the loaduimage global variable as a command.
+    if run loaduimage
+    then
+        run loadfdt
+        run mmcboot
+    fi
+
+# Name the root partition.
+mmcroot=/dev/mmcblk0p2 rw
+
+# A command to load a Flattened Descriptor Table from an ext4 filesystem.
+loadfdt=ext4load mmc ${mmcdev}:2 ${fdtaddr} /boot/dtbs/${fdtfile}
+
+# A command to load a kernel from an ext4 filesystem.
+# The default loaduimage is load mmc ${mmcdev}:${mmcpart} ${loadaddr} zImage
+# This replaces it.
+loaduimage=
+    if ext4load mmc 0:2 ${loadaddr} /boot/zImage
+    then
+        setenv mmcdev 0
+    else
+        setenv mmcdev 1
+        if test $mmc0 = 1
+        then
+            setenv mmcroot /dev/mmcblk1p2 rw
+        fi
+        ext4load mmc 1:2 ${loadaddr} /boot/zImage
+    fi
+
+#
+# eof
+#
