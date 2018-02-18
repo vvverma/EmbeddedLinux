@@ -3,8 +3,12 @@ BUILD_DIR = $(shell pwd)
 DEPLOY = $(BUILD_DIR)/deploy
 U-BOOT = $(BUILD_DIR)/u-boot
 KERNEL = $(BUILD_DIR)/kernel/linux-4.14.18
+BUSYBOX = $(BUILD_DIR)/busybox
 CONFIGS = $(BUILD_DIR)/configs
+LCONFIG ?= omap2plus_defconfig
+UCONFIG ?= am335x_boneblack_defconfig
 TARGET_ARCH = arm
+TARGET_FS = target
 BUILD_ARGS = ARCH=$(TARGET_ARCH)\
 	     CROSS_COMPILE=${CC} #CHECK FOR CROSS-TOOL CHAIN LOADED IN ENV
 
@@ -20,7 +24,7 @@ __check_defined = \
           ($2))$(if $(value @), required by target `$@`)))
 
 
-all: u-boot-clean u-boot-defconfig u-boot linux-clean linux-defconfig linux
+all: u-boot-clean u-boot-defconfig u-boot linux-clean linux-defconfig linux busybox-clean busybox-defconfig busybox busybox-dist
 
 
 u-boot-clean:  deploy-clean	   
@@ -65,6 +69,24 @@ linux: $(FOLDER)
 	$(MAKE) -C $(KERNEL) $(BUILD_ARGS) -j4 modules
 	cp $(KERNEL)/arch/$(TARGET_ARCH)/boot/uImage $(DEPLOY)/$(FOLDER)/ 
 	cp $(KERNEL)/arch/$(TARGET_ARCH)/boot/dts/am335x-boneblack.dtb $(DEPLOY)/$(FOLDER)/
+
+busybox-clean:
+	$(MAKE) -C $(BUSYBOX) $(BUILD_ARGS) distclean
+
+busybox-defconfig: 
+	$(MAKE) -C $(BUSYBOX) $(BUILD_ARGS) defconfig
+
+busybox-menuconfig:
+	$(MAKE) -C $(BUSYBOX) $(BUILD_ARGS) menuconfig
+
+busybox-dist:
+	cd $(DEPLOY)/$(FOLDER); \
+	tar -zcvf rootfs.tar.gz $(DEPLOY)/$(FOLDER)/$(TARGET_FS) 
+
+busybox: $(FOLDER)
+	mkdir -p $(DEPLOY)/$(FOLDER)/$(TARGET_FS)
+	$(MAKE) -C $(BUSYBOX) $(BUILD_ARGS) CONFIG_PREFIX=$(DEPLOY)/$(FOLDER)/$(TARGET_FS) install
+	$(MAKE) -C $(KERNEL) $(BUILD_ARGS)  INSTALL_MOD_PATH=$(DEPLOY)/$(FOLDER)/$(TARGET_FS) modules_install
 
 deploy-clean:
 	rm -rf  $(DEPLOY)/$(FOLDER)/*	

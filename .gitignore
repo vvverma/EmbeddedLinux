@@ -1,3 +1,6 @@
 update.txt
 deploy/*
-docs/EmbeddedLinuxBBB/*
+busybox/*
+kernel/*
+uboot/*
+docs/*
