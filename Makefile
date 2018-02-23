@@ -26,7 +26,8 @@ __check_defined = \
           ($2))$(if $(value @), required by target `$@`)))
 
 
-all:  u-boot linux busybox-defconfig busybox busybox-dist
+all:  u-boot linux busybox-defconfig busybox modules-install busybox-dist
+
 
 
 u-boot-clean:	   
@@ -42,9 +43,8 @@ deploy-clean:
 	rm -rf  $(DEPLOY)/*	
 
 clean: u-boot-clean busybox-clean linux-clean
-	-rm 	.*_built
-	-rm -rf  $(DEPLOY)/$(OUTPUT)
-
+	-@ rm 	.*_built
+	-@ rm -rf  $(DEPLOY)/$(OUTPUT)
 
 
 
@@ -59,6 +59,7 @@ linux-defconfig:
 busybox-defconfig: 
 	$(MAKE) -C $(BUSYBOX) $(BUILD_ARGS) defconfig
 
+defconfig: u-boot-defconfig linux-defconfig busybox-defconfig
 
 
 
@@ -90,43 +91,103 @@ linux-savedefconfig:
 
 
 u-boot: $(OUTPUT)
+	@echo ""
+	@echo ""
+	@echo ""
+	@ echo "UBOOT BUILD (STARTED)"
+	@ echo " "
+	@echo ""
+	@echo ""
 	$(MAKE) -C $(U-BOOT) $(BUILD_ARGS)  
 	cp $(U-BOOT)/MLO  $(DEPLOY)/$(OUTPUT)
 	cp $(U-BOOT)/u-boot.bin $(DEPLOY)/$(OUTPUT) 
 	cp $(U-BOOT)/u-boot.img $(DEPLOY)/$(OUTPUT) 
-	touch ".$@_built"
+	@ echo "UBOOT BUILD (FINISHED)"
+	@ echo ""
+	@touch ".$@_built"
 
 linux: $(OUTPUT)
+	@echo ""
+	@echo ""
+	@ echo "LINUX KERNEL BUILD (STARTED)"
+	@ echo ""
+	@echo ""
+	@echo ""
 	$(MAKE) -C $(KERNEL) $(BUILD_ARGS) uImage dtbs LOADADDR=$(KLOAD_ADDR) -j4	
 	$(MAKE) -C $(KERNEL) $(BUILD_ARGS) -j4 modules
 	cp $(KERNEL)/arch/$(TARGET_ARCH)/boot/uImage $(DEPLOY)/$(OUTPUT)/ 
 	cp $(KERNEL)/arch/$(TARGET_ARCH)/boot/zImage $(DEPLOY)/$(OUTPUT)/ 
 	cp $(KERNEL)/arch/$(TARGET_ARCH)/boot/dts/am335x-boneblack.dtb $(DEPLOY)/$(OUTPUT)/
-	touch ".$@_built"
+	@echo ""
+	@echo ""
+	@echo ""
+	@ echo "LINUX KERNEL BUILD (FINISHED)"
+	@ echo ""
+	@echo ""
+	@echo ""
+	@touch ".$@_built"
 
 busybox: $(OUTPUT)
-	mkdir -p $(DEPLOY)/$(OUTPUT)/$(TARGET_FS)
+	@mkdir -p $(DEPLOY)/$(OUTPUT)/$(TARGET_FS)
+	@echo ""
+	@echo ""
+	@echo ""
+	@echo "BUSYBOX BUILD (STARTED)"
+	@echo ""
+	@echo ""
+	@echo ""
+	@echo ""
 	$(MAKE) -C $(BUSYBOX) $(BUILD_ARGS) CONFIG_PREFIX=$(DEPLOY)/$(OUTPUT)/$(TARGET_FS) install
+	@echo ""
+	@echo ""
+	@echo ""
+	@ echo "BUSYBOX BUILD (FINISHED)"
+	@echo ""
+	@echo ""
+	@ echo ""
+	@touch ".$@_built"
+
+modules-install: $(OUTPUT) $(TARGET_FS)
+	@echo ""
+	@echo ""
+	@echo ""
+	@ echo "INSTALLING MODULES IN ROOTFS (STARTED)"
+	@ echo ""
+	@echo ""
+	@echo ""
 	$(MAKE) -C $(KERNEL) $(BUILD_ARGS)  INSTALL_MOD_PATH=$(DEPLOY)/$(OUTPUT)/$(TARGET_FS) modules_install
-	touch ".$@_built"
 
 
+busybox-dist:$(OUTPUT)
+	@echo ""
+	@echo ""
+	@echo ""
+	@ echo "ROOTFS.tar.gz (STARTED)"
+	@ echo ""
+	@echo ""
+	@echo ""
 
-
-busybox-dist:
-	cd $(DEPLOY)/$(OUTPUT); \
+	@cd $(DEPLOY)/$(OUTPUT); \
 	tar -zcvf rootfs.tar.gz $(DEPLOY)/$(OUTPUT)/$(TARGET_FS) 
+	@ echo "ROOTFS.tar.gz (CREATED)"
+	@ echo ""
+	@ echo "BUILT FINISHED CHECK DEPLOY DIRECTORY"
 
-busybox-dist-clean:
-	cd $(DEPLOY)/$(OUTPUT); \
+busybox-dist-clean: $(OUTPUT)
+	@cd $(DEPLOY)/$(OUTPUT); \
 	rm -rf rootfs.tar.gz 
 
 
 
 
 $(OUTPUT):
-	if [ ! -d "$(DEPLOY)/$(OUTPUT)" ];then \
+	@ if [ ! -d "$(DEPLOY)/$(OUTPUT)" ];then \
 	mkdir -p $(DEPLOY)/$(OUTPUT) ; fi
+
+$(TARGET_FS):
+	@ if [ ! -d "$(DEPLOY)/$(OUTPUT)/$(TARGET_FS)" ];then \
+	echo "ROOTFS not found to install modules, run make busybox"; \
+	exit 1; fi
 
 help:   
 	@fgrep -h "##" $(MAKEFILE_LIST) | fgrep -v fgrep | \ 
@@ -136,4 +197,4 @@ help:
 
  
 .PHONY: u-boot-menuconfig u-boot-savedefconfig u-boot-defconfig u-boot  linux-clean linux-defconfig linux-savdefconfig \
-        linux-menuconfig linux busybox-clean busybox-menuconfig busybox-defconfig busybox busybox-dist busybox-dist-clean deploy-clean help  all
+        linux-menuconfig linux busybox-clean busybox-menuconfig busybox-defconfig busybox busybox-dist busybox-dist-clean deploy-clean modules-install help  all
