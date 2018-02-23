@@ -1,6 +1,10 @@
 update.txt
 deploy/*
+deploy/*/*
 busybox/*
 kernel/*
 uboot/*
 docs/*
+.busybox_built
+.linux_built
+.u-boot_built
