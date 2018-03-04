@@ -3,9 +3,11 @@ BUILD_DIR = $(shell pwd)
 DEPLOY = $(BUILD_DIR)/deploy
 U-BOOT = $(BUILD_DIR)/u-boot
 LINUX_VER ?= linux-4.14.18
-KERNEL := $(BUILD_DIR)/kernel/$(LINUX_VER)
+KERNEL  = $(BUILD_DIR)/kernel/$(LINUX_VER)
 BUSYBOX = $(BUILD_DIR)/busybox
 CONFIGS = $(BUILD_DIR)/configs
+UENV    = $(BUILD_DIR)/uEnv.txt
+UENV-FILE ?= uEnv-SD.txt
 LCONFIG ?= omap2plus_defconfig
 UCONFIG ?= am335x_boneblack_defconfig
 KLOAD_ADDR ?= 0X80008000  
@@ -26,7 +28,7 @@ __check_defined = \
           ($2))$(if $(value @), required by target `$@`)))
 
 
-all:  u-boot linux busybox-defconfig busybox modules-install busybox-dist
+all:  u-boot linux busybox-defconfig busybox modules-install busybox-dist u-env
 
 
 
@@ -167,16 +169,32 @@ busybox-dist:$(OUTPUT)
 	@echo ""
 	@echo ""
 
-	@cd $(DEPLOY)/$(OUTPUT); \
-	tar -zcvf rootfs.tar.gz $(DEPLOY)/$(OUTPUT)/$(TARGET_FS) 
+	@cd $(DEPLOY)/$(OUTPUT)/$(TARGET_FS); \
+	tar -zcvf rootfs.tar.gz * ;\
+	mv rootfs.tar.gz  $(DEPLOY)/$(OUTPUT)
 	@ echo "ROOTFS.tar.gz (CREATED)"
 	@ echo ""
-	@ echo "BUILT FINISHED CHECK DEPLOY DIRECTORY"
+	@ echo ""
 
 busybox-dist-clean: $(OUTPUT)
 	@cd $(DEPLOY)/$(OUTPUT); \
 	rm -rf rootfs.tar.gz 
 
+
+u-env: $(OUTPUT) $(TARGET_FS)
+	@echo ""
+	@echo ""
+	@echo ""
+	@ echo "Creating uEnv.txt"
+	@ echo ""
+	@echo ""
+	@echo ""
+
+	@cd $(UENV)/ ; \
+	cp  $(UENV-FILE) $(DEPLOY)/$(OUTPUT)/uEnv.txt
+	@ echo "uENV CREATED"
+	@ echo ""
+	@ echo "BUILT FINISHED CHECK DEPLOY DIRECTORY"
 
 
 
